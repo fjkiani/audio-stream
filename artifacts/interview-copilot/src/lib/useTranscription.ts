@@ -47,6 +47,7 @@ export function useTranscription(capabilities: Capabilities) {
   const [error, setError] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [partialText, setPartialText] = useState("");
+  const [systemAudioOn, setSystemAudioOn] = useState(false);
 
   const isActiveRef = useRef(false);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -199,6 +200,12 @@ export function useTranscription(capabilities: Capabilities) {
       const { displayStream, audioStream: systemAudio } =
         await audio.captureSystemAudio();
       displayStreamRef.current = displayStream;
+      setSystemAudioOn(!!systemAudio);
+      if (displayStream && !systemAudio) {
+        setError(
+          'System audio not captured — please tick "Share tab audio" when sharing.'
+        );
+      }
 
       setStatus("auth");
       const tokenRes = await fetch("/api/token", { method: "POST" });

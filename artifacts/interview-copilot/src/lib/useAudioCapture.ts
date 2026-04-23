@@ -75,33 +75,44 @@ export function useAudioCapture() {
 
       const micSource = audioContext.createMediaStreamSource(micStream);
 
-      let finalSource: AudioNode = micSource;
+      // Single GainNode acts as a summing bus — connecting two mono sources to
+      // the same destination causes the WebAudio engine to add their samples,
+      // producing a properly mixed mono signal that the AudioWorklet (which
+      // reads inputs[0][0]) will actually receive.
+      const mixBus = audioContext.createGain();
+      mixBus.gain.value = 1.0;
+
+      const micGain = audioContext.createGain();
+      micGain.gain.value = 1.0;
+      micSource.connect(micGain).connect(mixBus);
 
       if (systemAudioStream) {
         const systemSource =
           audioContext.createMediaStreamSource(systemAudioStream);
-        // Mix mic + system audio via ChannelMerger → merge to mono
-        const merger = audioContext.createChannelMerger(2);
-        const gainNode = audioContext.createGain();
-        gainNode.gain.value = 1.0;
-
-        micSource.connect(merger, 0, 0);
-        systemSource.connect(merger, 0, 1);
-        merger.connect(gainNode);
-        finalSource = gainNode;
+        const systemGain = audioContext.createGain();
+        // Boost system audio slightly — tab/screen capture tends to be quieter
+        systemGain.gain.value = 1.4;
+        systemSource.connect(systemGain).connect(mixBus);
       }
 
       // Mutable ref so we can hot-swap the send function on reconnect
       let activeSendFn = sendFn;
 
-      const workletNode = new AudioWorkletNode(audioContext, "pcm-processor");
+      const workletNode = new AudioWorkletNode(audioContext, "pcm-processor", {
+        channelCount: 1,
+        channelCountMode: "explicit",
+        channelInterpretation: "speakers",
+      });
       workletNode.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
         activeSendFn(event.data);
       };
 
-      finalSource.connect(workletNode);
-      // Connect to destination to keep the graph alive (silent output)
-      workletNode.connect(audioContext.destination);
+      mixBus.connect(workletNode);
+      // Connect to destination through a muted gain to keep the graph alive
+      // without echoing audio back to the user
+      const silentSink = audioContext.createGain();
+      silentSink.gain.value = 0;
+      workletNode.connect(silentSink).connect(audioContext.destination);
 
       const pipeline: AudioPipeline = {
         cleanup: () => {
