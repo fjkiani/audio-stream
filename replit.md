@@ -25,3 +25,33 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## Interview Copilot (artifacts/interview-copilot)
+
+Real-time AI interview assistant. Cloned and improved from fjkiani/assembly-ai-tts-v2.
+
+### Features
+- **AssemblyAI streaming STT** — WebSocket via `u3-rt-pro` model with speaker diarization
+- **AudioWorklet audio pipeline** — replaced deprecated ScriptProcessorNode for reliable PCM16 capture
+- **Progressive LLM streaming** — tokens appear one-by-one with animated structured sections
+- **Groq LLM** — Llama 3.3 70B with SSE streaming via `/api/copilot`
+- **Rescue mode** — SPACE key bypasses debounce for instant AI help when frozen
+- **Burn context** — BACKSPACE flushes active context
+- **Bookend memory** — first 2 + last 4 turns sent as history
+
+### API Routes (api-server)
+- `POST /api/token` — generates AssemblyAI short-lived token for browser WS
+- `POST /api/copilot` — SSE streaming LLM response (Groq)
+- `POST /api/followup` — SSE follow-up question generator
+
+### Required Secrets
+- `ASSEMBLYAI_API_KEY` — for real-time audio transcription
+- `GROQ_API_KEY` — for LLM coaching responses
+
+### Key Fixes vs Original
+1. **Audio**: AudioWorkletNode (audio thread) replaces ScriptProcessorNode (main thread)
+   - File: `artifacts/interview-copilot/public/audio-processor.js` (worklet processor)
+   - File: `artifacts/interview-copilot/src/lib/useAudioCapture.ts`
+2. **Progressive streaming**: Tokens render immediately with section-level parsing
+   - File: `artifacts/interview-copilot/src/lib/useCopilotStream.ts`
+   - File: `artifacts/interview-copilot/src/components/StreamingSection.tsx`
