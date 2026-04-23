@@ -169,9 +169,9 @@ export default function CopilotPage() {
         )}
 
         {/* Transcripts — live feed at top */}
-        {transcripts.length > 0 && (
+        {(transcripts.length > 0 || partialText) && (
           <div className="transcript-feed">
-            {transcripts.slice(-6).map((t) => (
+            {transcripts.slice(-12).map((t) => (
               <div
                 key={t.id}
                 className={`transcript-line transcript-line--${t.speaker}`}
@@ -182,6 +182,15 @@ export default function CopilotPage() {
                 <span className="transcript-text">{t.text}</span>
               </div>
             ))}
+            {partialText && (
+              <div className="transcript-line transcript-line--partial">
+                <span className="transcript-speaker">●</span>
+                <span className="transcript-text">
+                  {partialText}
+                  <span className="stream-cursor" />
+                </span>
+              </div>
+            )}
           </div>
         )}
 

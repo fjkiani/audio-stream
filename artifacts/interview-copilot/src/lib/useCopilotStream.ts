@@ -237,12 +237,19 @@ export function useCopilotStream() {
 
         lastOutputRef.current = visible;
         cooldownUntilRef.current = Date.now() + COOLDOWN_MS;
+
+        // CRITICAL: clear streaming state once it's safely in history,
+        // otherwise <StreamingResponse> + <HistoricalThread> both render the same turn.
+        setStreamingSections([]);
+        setStreamingRaw("");
+        setActiveQuestion("");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         setStreamingSections([{ header: "[ERROR]", content: `⚠ ${msg}`, done: true }]);
+        setStreamingRaw("");
+        setActiveQuestion("");
       } finally {
         setIsStreaming(false);
-        setActiveQuestion("");
         copilotFiringRef.current = false;
       }
     },
