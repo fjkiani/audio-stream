@@ -167,6 +167,17 @@ export function useTranscription(capabilities: Capabilities) {
 
   const audio = useAudioCapture();
 
+  // Replay coalesced context once the LLM finishes — if the interviewer kept
+  // talking while the previous response was streaming, we now have a chance
+  // to consolidate that into the next fire.
+  const wasStreamingRef = useRef(false);
+  useEffect(() => {
+    if (wasStreamingRef.current && !copilot.isStreaming) {
+      gate.onLlmComplete();
+    }
+    wasStreamingRef.current = copilot.isStreaming;
+  }, [copilot.isStreaming, gate]);
+
   // Clipboard capture
   const [clipboardCode, setClipboardCode] = useState("");
   useEffect(() => {
@@ -285,6 +296,8 @@ export function useTranscription(capabilities: Capabilities) {
     error,
     transcripts,
     partialText: gate.previewText || partialText,
+    pendingDuringFire: gate.pendingDuringFire,
+    systemAudioOn,
     copilot,
     clipboardCode,
     start,

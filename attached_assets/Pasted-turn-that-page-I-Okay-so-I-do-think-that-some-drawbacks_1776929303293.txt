@@ -1,0 +1,94 @@
+turn that page.
+I
+Okay, so— I do think that some drawbacks here are that Okay, so one thing that we could have done—
+I
+we could have done is instead of this active book, instead of saving the ID, we could have saved the book itself.
+C
+But then
+I
+And I think from a Pythonic standpoint, that might make sense.
+I
+in the future, if we're using some sort of database or something, an ID would make more sense because that's easier to store in like a table.
+C
+Um, and
+I
+If— and okay, also for this display page, you might see that we've called this display page and turn page up here in the book.
+I
+And the reason
+I
+The reason why I did that rather than— rather than just call like self.book.content.last_page, like book.last_page or something.
+#1
+turn that page. Okay, so— I do think that some drawbacks here are that Okay, so one thing that we could have done—
+1.2s
+[MOTIVE]
+The interviewer needs to know how to mitigate potential drawbacks in the system.
+[DELIVERY]
+Lean forward slightly, maintaining eye contact, and speak in a clear, concise tone.
+[THE MOVE]
+▸
+Step 1: Implementing a feedback loop to monitor and analyze system performance can help identify areas for improvement, allowing for targeted optimizations.
+▸
+Step 2: Introducing redundancy in critical components can minimize the impact of failures, ensuring high availability and reliability.
+▸
+Step 3: Adopting a modular architecture enables easier maintenance, updates, and scaling, reducing the complexity and risk associated with making changes to the system.
+[THE BAIT]
+"Chaos engineering"
+#2
+we could have done is instead of this active book, instead of saving the ID, we could have saved the book itself. But th…
+1.2s
+[MOTIVE]
+The interviewer needs to understand the design considerations and potential consequences of storing the book object instead of its ID.
+[DELIVERY]
+Nod thoughtfully, acknowledging the suggestion, and respond with a measured tone.
+[THE MOVE]
+▸
+Step 1: Storing the book object directly would eliminate the need for a separate lookup or query to retrieve the book details, potentially improving performance by reducing database or storage access.
+▸
+Step 2: However, this approach would also increase memory usage and potentially lead to data inconsistencies if the stored book object becomes outdated or diverges from the authoritative source.
+▸
+Step 3: Implementing a caching mechanism with a suitable expiration policy could help balance the tradeoff between performance and data consistency, allowing for efficient storage and retrieval of book objects while minimizing the risk of stale data.
+[THE BAIT]
+"Eventual consistency"
+#3
+in the future, if we're using some sort of database or something, an ID would make more sense because that's easier to s…
+1.1s
+[STRENGTHEN]
+▸
+One specific technical point to add is that using IDs allows for efficient indexing, querying, and joining of data in a relational database, which is crucial for large-scale data management.
+▸
+An example to illustrate this point could be discussing how using IDs enables the use of foreign keys to establish relationships between different tables, facilitating complex queries and data analysis.
+[WATCH OUT]
+▸
+Avoid going off-topic by focusing too much on the specifics of database design; keep the discussion centered on the tradeoffs between using IDs and storing objects, and how this decision impacts the system's scalability and maintainability.
+#4
+If— and okay, also for this display page, you might see that we've called this display page and turn page up here in the…
+1.4s
+[MOTIVE]
+The interviewer needs to understand the purpose and implementation of the display page and turn page features.
+[DELIVERY]
+Maintain a neutral, inquiring tone and lean forward slightly to show interest.
+[THE MOVE]
+▸
+Step 1: The display page feature likely involves rendering a specific page of the book, which could be achieved through a combination of data structures and algorithms to efficiently store and retrieve page content.
+▸
+Step 2: The turn page functionality might utilize event handling and state management to update the displayed page, potentially incorporating animations or other visual effects to enhance the user experience.
+▸
+Step 3: To optimize performance, the implementation could leverage techniques such as pagination, caching, or lazy loading to minimize the amount of data transferred and processed when turning pages.
+[THE BAIT]
+"Page fragmentation"
+#5
+The reason why I did that rather than— rather than just call like self.book.content.last_page, like book.last_page or so…
+1.2s
+[MOTIVE]
+The interviewer needs to know the reasoning behind their design decision and potential alternatives.
+[DELIVERY]
+Nod thoughtfully, acknowledging the interviewer's explanation, and respond with a curious tone.
+[THE MOVE]
+▸
+Step 1: Using a method like `turn_page` instead of `book.last_page` allows for more flexibility and extensibility in the system, as it decouples the page navigation logic from the book's internal representation.
+▸
+Step 2: This approach also enables easier testing and mocking of the page navigation functionality, as the dependencies are more explicit and can be easily isolated.
+▸
+Step 3: However, it may introduce additional complexity and indirection, which could impact performance and maintainability if not carefully managed, highlighting the need for a balanced design that considers multiple factors.
+[THE BAIT]
+"Law of Demeter"

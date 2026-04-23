@@ -30,6 +30,8 @@ export default function CopilotPage() {
     error,
     transcripts,
     partialText,
+    pendingDuringFire,
+    systemAudioOn,
     copilot,
     start,
     stop,
@@ -102,6 +104,12 @@ export default function CopilotPage() {
     }
   }, [copilot.history, copilot.streamingSections, copilot.streamingRaw]);
 
+  // Auto-scroll the live transcript feed
+  useEffect(() => {
+    const el = document.querySelector(".transcript-feed");
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [transcripts.length, partialText]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
@@ -138,6 +146,8 @@ export default function CopilotPage() {
           latency={copilot.latency}
           turnCount={copilot.history.length}
           error={error}
+          pendingDuringFire={pendingDuringFire}
+          systemAudioOn={systemAudioOn}
         />
       </header>
 
@@ -154,24 +164,18 @@ export default function CopilotPage() {
         onToggle={toggle}
       />
 
-      <div className="copilot-thread" ref={threadRef}>
-        {/* Empty state */}
-        {!isActive && !hasHistory && !isStreaming && (
-          <div className="empty-state">
-            <div className="empty-icon">⬡</div>
-            <p className="empty-title">Interview Copilot Ready</p>
-            <p className="empty-sub">Click START, then speak or play audio.</p>
-            <div className="empty-shortcuts">
-              <div className="shortcut"><kbd>SPACE</kbd> SOS rescue</div>
-              <div className="shortcut"><kbd>⌫</kbd> Burn context</div>
-            </div>
+      {/* Live transcript — always visible, sticky between controls and thread */}
+      {(isActive || transcripts.length > 0) && (
+        <div className="transcript-panel">
+          <div className="transcript-panel-header">
+            <span className="transcript-panel-title">⏵ LIVE TRANSCRIPT</span>
+            <span className="transcript-panel-count">{transcripts.length} turns captured</span>
           </div>
-        )}
-
-        {/* Transcripts — live feed at top */}
-        {(transcripts.length > 0 || partialText) && (
           <div className="transcript-feed">
-            {transcripts.slice(-12).map((t) => (
+            {transcripts.length === 0 && !partialText && (
+              <div className="transcript-empty">Waiting for audio…</div>
+            )}
+            {transcripts.slice(-8).map((t) => (
               <div
                 key={t.id}
                 className={`transcript-line transcript-line--${t.speaker}`}
@@ -191,6 +195,21 @@ export default function CopilotPage() {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      <div className="copilot-thread" ref={threadRef}>
+        {/* Empty state */}
+        {!isActive && !hasHistory && !isStreaming && (
+          <div className="empty-state">
+            <div className="empty-icon">⬡</div>
+            <p className="empty-title">Interview Copilot Ready</p>
+            <p className="empty-sub">Click START, then speak or play audio.</p>
+            <div className="empty-shortcuts">
+              <div className="shortcut"><kbd>SPACE</kbd> SOS rescue</div>
+              <div className="shortcut"><kbd>⌫</kbd> Burn context</div>
+            </div>
           </div>
         )}
 

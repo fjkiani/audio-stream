@@ -21,6 +21,8 @@ interface StatusBarProps {
   latency: number;
   turnCount: number;
   error: string | null;
+  pendingDuringFire: number;
+  systemAudioOn: boolean;
 }
 
 export const StatusBar = memo(function StatusBar({
@@ -30,6 +32,8 @@ export const StatusBar = memo(function StatusBar({
   latency,
   turnCount,
   error,
+  pendingDuringFire,
+  systemAudioOn,
 }: StatusBarProps) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
 
@@ -57,6 +61,16 @@ export const StatusBar = memo(function StatusBar({
       </div>
 
       <div className="status-right">
+        {pendingDuringFire > 0 && (
+          <span className="status-meta status-meta--queue">
+            ⧗ buffering {pendingDuringFire}w
+          </span>
+        )}
+        {isActive && (
+          <span className={`status-meta ${systemAudioOn ? "status-meta--on" : "status-meta--off"}`}>
+            sys: {systemAudioOn ? "ON" : "OFF"}
+          </span>
+        )}
         {turnCount > 0 && (
           <span className="status-meta">turns: {turnCount}</span>
         )}
