@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import multer from "multer";
+import { db, transcriptsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -132,14 +133,34 @@ router.post(
         logger.info({ id, status }, "Transcript polling");
       });
 
+      // Persist to DB. Auto-derive a friendly title from the filename.
+      const title = (file.originalname.replace(/\.[^.]+$/, "") || "Untitled").slice(0, 280);
+      const inserted = await db
+        .insert(transcriptsTable)
+        .values({
+          title,
+          text: result.text,
+          originalFilename: file.originalname,
+          audioDuration: result.audio_duration ?? null,
+          languageCode: result.language_code ?? null,
+          wordCount: result.words.length,
+          assemblyaiId: id,
+        })
+        .returning();
+
+      const saved = inserted[0];
+
       res.json({
-        id,
-        text: result.text,
-        audio_duration: result.audio_duration,
-        language_code: result.language_code,
-        word_count: result.words.length,
-        original_filename: file.originalname,
+        id: saved.id,
+        assemblyai_id: id,
+        title: saved.title,
+        text: saved.text,
+        audio_duration: saved.audioDuration,
+        language_code: saved.languageCode,
+        word_count: saved.wordCount,
+        original_filename: saved.originalFilename,
         original_size: file.size,
+        created_at: saved.createdAt.toISOString(),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";

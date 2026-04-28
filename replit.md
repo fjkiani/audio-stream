@@ -28,27 +28,59 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ## Scribe — Audio File Transcriber (artifacts/interview-copilot)
 
-Pivoted from the real-time Interview Copilot into a focused upload-and-transcribe app.
-Frontend: drag-and-drop or browse → upload → transcript displayed with copy/download.
+Audio-file transcription app built on AssemblyAI (universal-2 batch model) with
+a saved library, AI assistant, and links between transcripts.
 
 ### Features
-- **File upload** with progress (XHR for upload-progress events)
-- **Drag-and-drop** support
-- **AssemblyAI batch transcription** (universal-2 model) via the `/api/transcribe` route
-- **Copy to clipboard** and **download as .txt**
-- 200 MB max file size, accepts audio and video formats
+- **Upload + transcribe**: drag-and-drop or browse, 200 MB max, audio + video.
+  Auto-saved to a Postgres-backed library on completion.
+- **Library**: sidebar list with search, quick metadata + AI summary excerpt.
+- **Detail view**: editable title, copy/export, delete.
+- **AI Assistant** (Groq · llama-3.3-70b-versatile):
+  - Summarize (3–6 sentence prose)
+  - Bullet points (4–10 key points)
+  - Ask the AI — streaming Q&A over the transcript (SSE)
+- **Relationships** between transcripts. Kinds: related, follow_up, continues,
+  elaborates, contradicts, references. Linked transcripts are optionally pulled
+  in as additional context for chat (capped at 4).
 
-### API Routes (api-server)
-- `GET  /api/healthz` — health check
-- `POST /api/transcribe` — multipart/form-data upload, field name `audio`. Returns
-  `{ id, text, audio_duration, language_code, word_count, original_filename, original_size }`.
-  Optional form fields: `speaker_labels`, `punctuate`, `format_text`.
-- (Legacy, unused by current UI but still mounted: `/api/token`, `/api/copilot`, `/api/followup`.)
+### Backend Routes (api-server, all under `/api`)
+- `POST /transcribe` — multipart upload, runs AssemblyAI, persists, returns `{ id, ... }`.
+- `GET  /transcripts`, `GET /transcripts/:id`
+- `PATCH /transcripts/:id` (title / summary / bullets), `DELETE /transcripts/:id`
+- `POST /transcripts/:id/summarize` body `{ mode: "summary"|"bullets", save? }`
+- `POST /transcripts/:id/relations` body `{ to_id, kind, note? }` (rejects self-link
+  and duplicate pairs in either direction with the same kind, returning 409).
+- `DELETE /relations/:relId`
+- `POST /transcripts/:id/chat` body `{ question, include_related? }` — SSE
+  events `meta`, `token`, `done`, `error`.
+
+UUID params are validated server-side; bad params return 400 not 500. Text
+passed to the LLM is truncated to safe upper bounds (60k chars primary,
+12k chars per related transcript).
 
 ### Required Secrets
-- `ASSEMBLYAI_API_KEY` — for the batch transcription API
+- `ASSEMBLYAI_API_KEY` — batch transcription
+- `GROQ_API_KEY` — summarize / bullets / chat
+- `DATABASE_URL` — Postgres for the library
+
+### DB schema (lib/db/src/schema)
+- `transcripts` — uuid id, title, text, original_filename, audio_duration,
+  language_code, word_count, summary, bullets (jsonb), assemblyai_id, timestamps.
+- `transcript_relations` — uuid id, from_id, to_id, kind, note, created_at.
+  Cascade-deletes when either side is deleted.
 
 ### Key Files
-- `artifacts/api-server/src/routes/transcribe.ts` — upload + poll AssemblyAI job
-- `artifacts/interview-copilot/src/pages/TranscribePage.tsx` — upload UI / progress / result
-- `artifacts/interview-copilot/src/index.css` — `tx-*` styles for the new UI
+- `artifacts/api-server/src/routes/transcribe.ts` — upload + AssemblyAI + save
+- `artifacts/api-server/src/routes/transcripts.ts` — CRUD + AI + relations + SSE
+- `artifacts/api-server/src/lib/groq.ts` — Groq complete + stream helpers
+- `artifacts/interview-copilot/src/pages/TranscribePage.tsx` — top-level layout
+- `artifacts/interview-copilot/src/components/{Sidebar,UploadPanel,DetailView,RelationsPanel,AskPanel}.tsx`
+- `artifacts/interview-copilot/src/lib/api.ts` — typed client + SSE parser
+- `artifacts/interview-copilot/src/index.css` — `sb-*`, `up-*`, `dv-*`, `rel-*`, `ask-*`, `ai-*` styles
+
+### Known limits / deferred
+- No authentication — single-tenant prototype. CORS is open.
+- Uses `multer` 1.4.5-lts.1 (deprecated upstream).
+- AI calls truncate long transcripts; no map-reduce chunking yet.
+- Legacy routes `/api/token`, `/api/copilot`, `/api/followup` are still mounted but unused.
