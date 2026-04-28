@@ -26,32 +26,29 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
-## Interview Copilot (artifacts/interview-copilot)
+## Scribe — Audio File Transcriber (artifacts/interview-copilot)
 
-Real-time AI interview assistant. Cloned and improved from fjkiani/assembly-ai-tts-v2.
+Pivoted from the real-time Interview Copilot into a focused upload-and-transcribe app.
+Frontend: drag-and-drop or browse → upload → transcript displayed with copy/download.
 
 ### Features
-- **AssemblyAI streaming STT** — WebSocket via `u3-rt-pro` model with speaker diarization
-- **AudioWorklet audio pipeline** — replaced deprecated ScriptProcessorNode for reliable PCM16 capture
-- **Progressive LLM streaming** — tokens appear one-by-one with animated structured sections
-- **Groq LLM** — Llama 3.3 70B with SSE streaming via `/api/copilot`
-- **Rescue mode** — SPACE key bypasses debounce for instant AI help when frozen
-- **Burn context** — BACKSPACE flushes active context
-- **Bookend memory** — first 2 + last 4 turns sent as history
+- **File upload** with progress (XHR for upload-progress events)
+- **Drag-and-drop** support
+- **AssemblyAI batch transcription** (universal-2 model) via the `/api/transcribe` route
+- **Copy to clipboard** and **download as .txt**
+- 200 MB max file size, accepts audio and video formats
 
 ### API Routes (api-server)
-- `POST /api/token` — generates AssemblyAI short-lived token for browser WS
-- `POST /api/copilot` — SSE streaming LLM response (Groq)
-- `POST /api/followup` — SSE follow-up question generator
+- `GET  /api/healthz` — health check
+- `POST /api/transcribe` — multipart/form-data upload, field name `audio`. Returns
+  `{ id, text, audio_duration, language_code, word_count, original_filename, original_size }`.
+  Optional form fields: `speaker_labels`, `punctuate`, `format_text`.
+- (Legacy, unused by current UI but still mounted: `/api/token`, `/api/copilot`, `/api/followup`.)
 
 ### Required Secrets
-- `ASSEMBLYAI_API_KEY` — for real-time audio transcription
-- `GROQ_API_KEY` — for LLM coaching responses
+- `ASSEMBLYAI_API_KEY` — for the batch transcription API
 
-### Key Fixes vs Original
-1. **Audio**: AudioWorkletNode (audio thread) replaces ScriptProcessorNode (main thread)
-   - File: `artifacts/interview-copilot/public/audio-processor.js` (worklet processor)
-   - File: `artifacts/interview-copilot/src/lib/useAudioCapture.ts`
-2. **Progressive streaming**: Tokens render immediately with section-level parsing
-   - File: `artifacts/interview-copilot/src/lib/useCopilotStream.ts`
-   - File: `artifacts/interview-copilot/src/components/StreamingSection.tsx`
+### Key Files
+- `artifacts/api-server/src/routes/transcribe.ts` — upload + poll AssemblyAI job
+- `artifacts/interview-copilot/src/pages/TranscribePage.tsx` — upload UI / progress / result
+- `artifacts/interview-copilot/src/index.css` — `tx-*` styles for the new UI

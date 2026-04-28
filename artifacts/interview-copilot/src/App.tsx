@@ -1,5 +1,5 @@
-import CopilotPage from "./pages/CopilotPage";
+import TranscribePage from "./pages/TranscribePage";
 
 export default function App() {
-  return <CopilotPage />;
+  return <TranscribePage />;
 }
