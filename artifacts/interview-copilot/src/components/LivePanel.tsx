@@ -129,7 +129,21 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       const node = new AudioWorkletNode(ctx, "pcm-processor");
       nodeRef.current = node;
       source.connect(node);
-      // Don't connect to ctx.destination — we don't want loopback playback.
+      // CRITICAL: a Web Audio node only runs if it has a path to the
+      // AudioContext destination. Route the worklet through a muted
+      // gain into the speakers — keeps the worklet alive without any
+      // audible loopback.
+      const sink = ctx.createGain();
+      sink.gain.value = 0;
+      node.connect(sink);
+      sink.connect(ctx.destination);
+      // eslint-disable-next-line no-console
+      console.log(
+        "[live] AudioContext sampleRate:",
+        ctx.sampleRate,
+        "state:",
+        ctx.state,
+      );
 
       // Open WS to our backend bridge.
       setStatus("connecting");
@@ -138,10 +152,22 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        // Make sure the audio graph is actually running.
+        if (ctx.state === "suspended") {
+          void ctx.resume();
+        }
         // Wire the worklet → WS pipe only once the socket is open.
+        let chunkCount = 0;
         node.port.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(ev.data);
+            chunkCount++;
+            if (chunkCount === 1 || chunkCount % 25 === 0) {
+              // eslint-disable-next-line no-console
+              console.log(
+                `[live] sent ${chunkCount} audio chunks (latest=${ev.data.byteLength}B)`,
+              );
+            }
           }
         };
         // Cheap volume meter: separate analyser tap.
@@ -184,11 +210,17 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
           case "begin":
             setStatus("live");
             startedAtRef.current = Date.now();
+            // eslint-disable-next-line no-console
+            console.log("[live] AssemblyAI session begin");
             break;
           case "partial":
+            // eslint-disable-next-line no-console
+            console.log("[live] partial:", msg.text);
             setPartial(msg.text ?? "");
             break;
           case "final":
+            // eslint-disable-next-line no-console
+            console.log("[live] FINAL:", msg.text);
             if ((msg.text ?? "").trim()) {
               setFinals((prev) => [
                 ...prev,

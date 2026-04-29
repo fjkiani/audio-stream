@@ -5,7 +5,10 @@ import { db, transcriptsTable } from "@workspace/db";
 import { logger } from "./logger";
 
 const ASSEMBLY_WS =
-  "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&format_turns=true";
+  "wss://streaming.assemblyai.com/v3/ws" +
+  "?sample_rate=16000" +
+  "&encoding=pcm_s16le" +
+  "&format_turns=true";
 
 interface AssemblyTurn {
   type: "Turn";
@@ -132,11 +135,22 @@ class LiveBridge {
     });
 
     // ─── Client → server ────────────────────────────────────────────
+    let bytesSent = 0;
+    let chunkCount = 0;
     this.client.on("message", (data, isBinary) => {
       if (isBinary) {
         // PCM 16-bit LE mono @ 16kHz from the browser.
         if (this.upstream && this.upstream.readyState === WebSocket.OPEN) {
           this.upstream.send(data);
+          chunkCount++;
+          const len = (data as Buffer).length ?? 0;
+          bytesSent += len;
+          if (chunkCount === 1 || chunkCount % 50 === 0) {
+            logger.info(
+              { chunkCount, bytesSent, latestChunkBytes: len },
+              "Forwarded audio chunks to AssemblyAI",
+            );
+          }
         }
         return;
       }
