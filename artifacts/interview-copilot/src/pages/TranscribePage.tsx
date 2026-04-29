@@ -3,9 +3,10 @@ import Sidebar from "../components/Sidebar";
 import UploadPanel from "../components/UploadPanel";
 import DetailView from "../components/DetailView";
 import DocToPdfPanel from "../components/DocToPdfPanel";
+import LivePanel from "../components/LivePanel";
 import { api, type TranscriptListItem } from "../lib/api";
 
-type Mode = "audio" | "doc";
+type Mode = "audio" | "live" | "doc";
 type View = { kind: "upload" } | { kind: "detail"; id: string };
 
 export default function TranscribePage() {
@@ -69,6 +70,15 @@ export default function TranscribePage() {
           <button
             type="button"
             role="tab"
+            aria-selected={mode === "live"}
+            className={`app-tab ${mode === "live" ? "app-tab--active" : ""}`}
+            onClick={() => setMode("live")}
+          >
+            <span className="app-tab-icon">●</span> Live
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={mode === "doc"}
             className={`app-tab ${mode === "doc" ? "app-tab--active" : ""}`}
             onClick={() => setMode("doc")}
@@ -85,6 +95,30 @@ export default function TranscribePage() {
             onNew={onNew}
             onRefresh={() => void refresh()}
           />
+        )}
+        {mode === "live" && (
+          <div className="sb sb--info">
+            <div className="sb-head">
+              <div className="sb-brand">
+                <span className="sb-mark" style={{ color: "#ff5577" }}>●</span>
+                <span className="sb-name">LIVE</span>
+              </div>
+            </div>
+            <div className="sb-info-body">
+              <p>
+                Real-time transcription powered by AssemblyAI streaming.
+              </p>
+              <p>
+                Click <strong>Start recording</strong> in the main pane and
+                allow microphone access. Words appear as you speak; finalised
+                segments become permanent paragraphs.
+              </p>
+              <p className="dv-muted">
+                Tip: save the transcript while it's still recording — the
+                connection closes when you stop.
+              </p>
+            </div>
+          </div>
         )}
         {mode === "doc" && (
           <div className="sb sb--info">
@@ -113,7 +147,7 @@ export default function TranscribePage() {
       </div>
 
       <main className="app-main">
-        {mode === "audio" ? (
+        {mode === "audio" && (
           <>
             {listError && view.kind === "upload" && (
               <div className="ux-error">⚠ {listError}</div>
@@ -129,9 +163,17 @@ export default function TranscribePage() {
               />
             )}
           </>
-        ) : (
-          <DocToPdfPanel />
         )}
+        {mode === "live" && (
+          <LivePanel
+            onSaved={(id) => {
+              void refresh();
+              setMode("audio");
+              setView({ kind: "detail", id });
+            }}
+          />
+        )}
+        {mode === "doc" && <DocToPdfPanel />}
       </main>
     </div>
   );

@@ -79,6 +79,38 @@ passed to the LLM is truncated to safe upper bounds (60k chars primary,
 - `artifacts/interview-copilot/src/lib/api.ts` — typed client + SSE parser
 - `artifacts/interview-copilot/src/index.css` — `sb-*`, `up-*`, `dv-*`, `rel-*`, `ask-*`, `ai-*` styles
 
+### Live transcription (AssemblyAI streaming)
+A third tab — **LIVE** — captures audio from the user's microphone and
+streams it to AssemblyAI's real-time API in real time. Partial words appear
+as you speak; finalised segments become permanent paragraphs.
+
+Wire-up:
+- Frontend: `getUserMedia` → `AudioContext` → `AudioWorkletNode`
+  (`public/audio-processor.js`) downsamples to 16 kHz mono Int16 PCM and posts
+  ArrayBuffer chunks to a `WebSocket` at `/api/live`.
+- Backend: `attachLiveTranscribe(server)` in `artifacts/api-server/src/lib/assemblyLive.ts`
+  attaches a `ws.WebSocketServer` (noServer pattern) to the http.Server in
+  `index.ts`. Each client connection opens an upstream WS to
+  `wss://streaming.assemblyai.com/v3/ws` (auth via `ASSEMBLYAI_API_KEY` header),
+  forwards binary audio frames, and forwards `Begin`/`Turn`/`Termination`
+  JSON messages back to the client.
+- Save: client sends `{"type":"save","title":"…"}` over the same WS while
+  recording; server inserts a `transcripts` row from the assembled finalised
+  text and replies with the new id. The frontend then jumps to the library
+  detail view of the new transcript.
+
+Key files:
+- `artifacts/api-server/src/lib/assemblyLive.ts`
+- `artifacts/interview-copilot/src/components/LivePanel.tsx`
+- `artifacts/interview-copilot/public/audio-processor.js`
+- styles under `.lv-*` in `src/index.css`
+
+Limitations:
+- Save only works while still recording (the WS is closed after stop).
+- `originalFilename` for live rows is hard-coded to `"(live recording)"`.
+- AssemblyAI's v3 streaming requires PAYG; if the key isn't enabled, the
+  upstream returns close-code 4xx and the UI surfaces an error toast.
+
 ### Markdown → PDF (CrisPRO.ai branded)
 A second mode in the same app, accessed from the "DOC → PDF" tab in the
 sidebar header.

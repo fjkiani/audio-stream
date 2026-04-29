@@ -19,6 +19,7 @@
     "multer": "1.4.5-lts.1",
     "pino": "^9",
     "pino-http": "^10",
+    "ws": "^8.20.0",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -27,6 +28,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "@types/node": "catalog:",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
