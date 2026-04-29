@@ -8,7 +8,9 @@ const ASSEMBLY_WS =
   "wss://streaming.assemblyai.com/v3/ws" +
   "?sample_rate=16000" +
   "&encoding=pcm_s16le" +
-  "&format_turns=true";
+  "&format_turns=true" +
+  // Multilingual model so the same UI works for any language the user speaks.
+  "&speech_model=universal-streaming-multilingual";
 
 interface AssemblyTurn {
   type: "Turn";
@@ -68,12 +70,26 @@ class LiveBridge {
     });
 
     this.upstream.on("message", (data: RawData) => {
+      const raw = data.toString();
+      // Log every upstream message verbatim while we debug.
+      logger.info({ raw: raw.slice(0, 500) }, "AssemblyAI → server");
+
       // AssemblyAI sends JSON text frames.
       let parsed: AssemblyMessage;
       try {
-        parsed = JSON.parse(data.toString()) as AssemblyMessage;
+        parsed = JSON.parse(raw) as AssemblyMessage;
       } catch {
         return;
+      }
+
+      // Surface anything other than Turn/Begin/Termination back to the
+      // client so the UI can show meaningful errors.
+      if (
+        parsed.type !== "Turn" &&
+        parsed.type !== "Begin" &&
+        parsed.type !== "Termination"
+      ) {
+        this.sendToClient({ type: "upstream_msg", raw: parsed });
       }
 
       if (parsed.type === "Turn") {
