@@ -56,7 +56,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   flex-direction: column;
   background: #0d1115;
   border-right: 1px solid var(--border);
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 .sb-head {
@@ -468,3 +469,333 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 }
 .ask-input input:focus { border-color: var(--accent); }
 .ask-input input:disabled { opacity: 0.6; }
+
+/* ════════════════════════════════════════
+   APP TABS (audio / doc switcher)
+   ════════════════════════════════════════ */
+.app-side {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0d1115;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+.app-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: #0a0d10;
+  flex-shrink: 0;
+}
+.app-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 12px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.app-tab:hover { color: var(--text-dim); }
+.app-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(0, 255, 136, 0.04);
+}
+.app-tab-icon { font-size: 14px; }
+
+/* The .sb child of .app-side no longer needs its own border. */
+.app-side .sb { border-right: none; }
+
+.sb--info { padding: 0; }
+.sb-info-body {
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sb-info-body p { margin: 0; }
+.sb-info-body strong { color: var(--text); }
+
+/* ════════════════════════════════════════
+   DOC → PDF (dp-*)
+   ════════════════════════════════════════ */
+.dp-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 32px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.dp-head h2 { font-size: 22px; margin-bottom: 4px; }
+.dp-subtitle { color: var(--text-dim); font-size: 13px; margin: 0; }
+
+.dp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .dp-grid { grid-template-columns: 1fr; }
+}
+
+.dp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dp-drop {
+  border: 1.5px dashed var(--border-2);
+  border-radius: 8px;
+  padding: 22px 16px;
+  background: var(--panel);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.18s, background 0.18s;
+}
+.dp-drop:hover, .dp-drop:focus-visible {
+  border-color: var(--accent);
+  background: var(--panel-2);
+  outline: none;
+}
+.dp-drop--over {
+  border-color: var(--accent);
+  background: rgba(0, 255, 136, 0.05);
+}
+.dp-drop-icon {
+  font-size: 22px;
+  color: var(--accent);
+}
+.dp-drop-text {
+  font-size: 13px;
+  color: var(--text);
+}
+.dp-drop-text code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--panel-2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
+.dp-field { display: flex; flex-direction: column; gap: 6px; }
+.dp-field label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.dp-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.dp-link {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 0;
+}
+.dp-link:hover { text-decoration: underline; }
+
+.dp-filename {
+  display: flex;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  padding-right: 10px;
+}
+.dp-filename:focus-within { border-color: var(--accent); }
+.dp-filename input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  min-width: 0;
+}
+.dp-filename-ext {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dp-textarea {
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  outline: none;
+  min-height: 320px;
+  resize: vertical;
+}
+.dp-textarea:focus { border-color: var(--accent); }
+
+.dp-actions { display: flex; gap: 10px; }
+
+.dp-toast {
+  background: rgba(0, 255, 136, 0.07);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  color: var(--accent);
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.dp-preview-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+}
+.dp-preview-frame {
+  background: #2a2f35;
+  padding: 18px;
+  border-radius: 8px;
+  max-height: 78vh;
+  overflow-y: auto;
+}
+.dp-preview-frame::-webkit-scrollbar { width: 8px; }
+.dp-preview-frame::-webkit-scrollbar-thumb {
+  background: #4a5560;
+  border-radius: 4px;
+}
+
+/* The actual A4-styled document, also the node we pass to html2pdf. */
+.dp-doc {
+  background: #ffffff;
+  color: #111827;
+  width: 100%;
+  max-width: 794px; /* ~A4 width @ 96dpi */
+  margin: 0 auto;
+  padding: 36px 44px 44px;
+  border-radius: 4px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12pt;
+  line-height: 1.55;
+}
+.dp-doc-header {
+  border-bottom: 2px solid #00a85a;
+  padding-bottom: 12px;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dp-doc-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dp-doc-brand-name {
+  font-size: 22pt;
+  font-weight: 700;
+  color: #0f5132;
+  letter-spacing: -0.01em;
+}
+.dp-doc-brand-mark {
+  font-size: 22pt;
+  line-height: 1;
+}
+.dp-doc-contact {
+  font-size: 10pt;
+  color: #4b5563;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.dp-doc-body { color: #1f2937; }
+.dp-doc-body h1,
+.dp-doc-body h2,
+.dp-doc-body h3,
+.dp-doc-body h4 {
+  color: #0f172a;
+  margin: 1.2em 0 0.5em;
+  line-height: 1.25;
+  font-weight: 700;
+}
+.dp-doc-body h1 { font-size: 18pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+.dp-doc-body h2 { font-size: 15pt; color: #0f5132; }
+.dp-doc-body h3 { font-size: 13pt; }
+.dp-doc-body h4 { font-size: 12pt; color: #374151; }
+.dp-doc-body p { margin: 0.7em 0; }
+.dp-doc-body ul, .dp-doc-body ol { padding-left: 1.5em; margin: 0.7em 0; }
+.dp-doc-body li { margin: 0.25em 0; }
+.dp-doc-body strong { color: #0f172a; }
+.dp-doc-body em { color: #374151; }
+.dp-doc-body a { color: #0f5132; text-decoration: underline; }
+.dp-doc-body code {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 10.5pt;
+  color: #b45309;
+}
+.dp-doc-body pre {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 10pt;
+}
+.dp-doc-body pre code { background: transparent; border: none; padding: 0; color: #111827; }
+.dp-doc-body blockquote {
+  border-left: 3px solid #00a85a;
+  background: #f0fdf4;
+  padding: 8px 14px;
+  margin: 1em 0;
+  color: #374151;
+  border-radius: 0 4px 4px 0;
+}
+.dp-doc-body blockquote p { margin: 0.3em 0; }
+.dp-doc-body hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.4em 0; }
+.dp-doc-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 11pt;
+}
+.dp-doc-body th, .dp-doc-body td {
+  border: 1px solid #e5e7eb;
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.dp-doc-body th { background: #f3f4f6; color: #0f172a; font-weight: 700; }

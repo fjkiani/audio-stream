@@ -79,6 +79,20 @@ passed to the LLM is truncated to safe upper bounds (60k chars primary,
 - `artifacts/interview-copilot/src/lib/api.ts` — typed client + SSE parser
 - `artifacts/interview-copilot/src/index.css` — `sb-*`, `up-*`, `dv-*`, `rel-*`, `ask-*`, `ai-*` styles
 
+### Markdown → PDF (CrisPRO.ai branded)
+A second mode in the same app, accessed from the "DOC → PDF" tab in the
+sidebar header.
+
+- Upload a `.md` / `.markdown` / `.txt` file (or paste markdown into the editor).
+- Live A4 preview with auto-injected header: **CrisPRO.ai 🧬** + `Contact@CrisPRO.ai`.
+- Renders headings, lists, bold/italic, links, code, blockquotes, tables (CommonMark + GFM).
+- Click **Download PDF** — generation runs entirely in the browser via
+  `marked` + lazily-imported `html2pdf.js` (html2canvas + jsPDF). No server round-trip.
+
+Key files:
+- `artifacts/interview-copilot/src/components/DocToPdfPanel.tsx`
+- styles under `.dp-*` and `.app-tabs` / `.app-tab` in `src/index.css`
+
 ### Known limits / deferred
 - No authentication — single-tenant prototype. CORS is open.
 - Uses `multer` 1.4.5-lts.1 (deprecated upstream).
