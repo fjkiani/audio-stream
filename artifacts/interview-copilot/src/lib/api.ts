@@ -82,7 +82,30 @@ export const api = {
 
   get: (id: string) => jsonOrThrow<TranscriptDetail>(fetch(`/api/transcripts/${id}`)),
 
-  patch: (id: string, body: { title?: string; summary?: string | null; bullets?: string[] | null }) =>
+  create: (body: {
+    title?: string;
+    text: string;
+    source?: string;
+    language_code?: string | null;
+    audio_duration?: number | null;
+  }) =>
+    jsonOrThrow<{ id: string; title: string; word_count: number }>(
+      fetch(`/api/transcripts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    ),
+
+  patch: (
+    id: string,
+    body: {
+      title?: string;
+      text?: string;
+      summary?: string | null;
+      bullets?: string[] | null;
+    },
+  ) =>
     jsonOrThrow<{ ok: true }>(
       fetch(`/api/transcripts/${id}`, {
         method: "PATCH",

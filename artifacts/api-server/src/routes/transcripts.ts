@@ -183,10 +183,71 @@ router.get("/transcripts/:id", async (req: Request, res: Response) => {
   }
 });
 
-// ─── PATCH (update title) ────────────────────────────────────────────────────
+// ─── CREATE (from raw text) ──────────────────────────────────────────────────
+
+const CreateBody = z.object({
+  title: z.string().trim().min(1).max(300).optional(),
+  text: z.string().min(1).max(2_000_000),
+  source: z.string().trim().min(1).max(200).optional(),
+  language_code: z.string().trim().min(1).max(20).nullable().optional(),
+  audio_duration: z.number().nonnegative().nullable().optional(),
+});
+
+function countWords(s: string): number {
+  return s.split(/\s+/).filter(Boolean).length;
+}
+
+router.post("/transcripts", async (req: Request, res: Response) => {
+  const parsed = CreateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", issues: parsed.error.issues });
+    return;
+  }
+  try {
+    const text = parsed.data.text.trim();
+    // The schema only checks `min(1)` pre-trim, so reject whitespace-only
+    // payloads here to avoid creating effectively empty transcripts.
+    if (!text) {
+      res.status(400).json({ error: "Transcript text cannot be empty." });
+      return;
+    }
+    const inserted = await db
+      .insert(transcriptsTable)
+      .values({
+        title: parsed.data.title?.trim() || "Untitled transcript",
+        text,
+        originalFilename: parsed.data.source?.trim() || "(text entry)",
+        audioDuration: parsed.data.audio_duration ?? null,
+        languageCode: parsed.data.language_code ?? null,
+        wordCount: countWords(text),
+      })
+      .returning({
+        id: transcriptsTable.id,
+        title: transcriptsTable.title,
+        wordCount: transcriptsTable.wordCount,
+      });
+    const row = inserted[0];
+    if (!row) {
+      res.status(500).json({ error: "Insert returned no row" });
+      return;
+    }
+    res.status(201).json({
+      id: row.id,
+      title: row.title,
+      word_count: row.wordCount,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    req.log.error({ err: msg }, "Create transcript failed");
+    res.status(500).json({ error: msg });
+  }
+});
+
+// ─── PATCH (rename / edit text / set summary or bullets) ─────────────────────
 
 const PatchBody = z.object({
   title: z.string().trim().min(1).max(300).optional(),
+  text: z.string().min(0).max(2_000_000).optional(),
   summary: z.string().nullable().optional(),
   bullets: z.array(z.string()).nullable().optional(),
 });
@@ -211,6 +272,11 @@ router.patch("/transcripts/:id", async (req: Request, res: Response) => {
     if (parsed.data.title !== undefined) updates.title = parsed.data.title;
     if (parsed.data.summary !== undefined) updates.summary = parsed.data.summary;
     if (parsed.data.bullets !== undefined) updates.bullets = parsed.data.bullets;
+    if (parsed.data.text !== undefined) {
+      const newText = parsed.data.text;
+      updates.text = newText;
+      updates.wordCount = countWords(newText);
+    }
 
     await db
       .update(transcriptsTable)

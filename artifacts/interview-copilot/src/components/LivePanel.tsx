@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../lib/api";
 
 type Status =
   | "idle"
@@ -326,18 +327,52 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
     }
   }, [status, cleanup]);
 
-  const save = useCallback(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      // Re-open a tiny WS just to save. Simpler: tell user to save before stop.
-      setErrorMsg(
-        "Connection already closed. Please save before stopping next time.",
-      );
+  const [saving, setSaving] = useState(false);
+
+  const save = useCallback(async () => {
+    // Always save via HTTP — no dependency on the live WebSocket. Works
+    // mid-session, after Stop, or after the upstream closed unexpectedly.
+    const text = finals
+      .map((f) => f.text)
+      .join(" ")
+      .trim();
+    if (!text) {
+      setErrorMsg("Nothing to save — transcript is empty.");
       return;
     }
-    wsRef.current.send(
-      JSON.stringify({ type: "save", title: title.trim() || undefined }),
-    );
-  }, [title]);
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      const seconds =
+        startedAtRef.current !== null
+          ? Math.max(1, Math.floor((Date.now() - startedAtRef.current) / 1000))
+          : null;
+      // If we already saved once and the user is "saving again" to capture
+      // late finals, PATCH the existing row instead of creating a duplicate.
+      if (savedId) {
+        await api.patch(savedId, {
+          text,
+          ...(title.trim() ? { title: title.trim() } : {}),
+        });
+        savedWordCountRef.current = text.split(/\s+/).filter(Boolean).length;
+        onSaved(savedId);
+      } else {
+        const created = await api.create({
+          title: title.trim() || undefined,
+          text,
+          source: "(live recording)",
+          audio_duration: seconds,
+        });
+        savedWordCountRef.current = text.split(/\s+/).filter(Boolean).length;
+        setSavedId(created.id);
+        onSaved(created.id);
+      }
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Failed to save transcript.");
+    } finally {
+      setSaving(false);
+    }
+  }, [finals, title, onSaved]);
 
   const reset = useCallback(() => {
     cleanup();
@@ -346,6 +381,7 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
     setPartial("");
     setErrorMsg(null);
     setSavedId(null);
+    savedWordCountRef.current = 0;
     setTitle("");
     setElapsed(0);
     setAudioLevel(0);
@@ -354,7 +390,16 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
 
   const fullText = finals.map((f) => f.text).join(" ").trim();
   const isRunning = status === "live" || status === "connecting" || status === "requesting-mic";
-  const canSave = status === "live" && fullText.length > 0;
+  // Save is now an HTTP call, so it works whether we're still streaming or
+  // already stopped — as long as we have some finalised text and aren't
+  // already saving. We deliberately allow re-save after an initial save: if
+  // late `final` segments arrive after the first save (common around
+  // Stop/termination boundaries) the user can capture them with another
+  // click rather than losing them.
+  const canSave = fullText.length > 0 && !saving;
+  const fullWordCount = fullText ? fullText.split(/\s+/).filter(Boolean).length : 0;
+  const savedWordCountRef = useRef(0);
+  const hasNewSinceSave = savedId !== null && fullWordCount > savedWordCountRef.current;
 
   function statusLabel(): string {
     switch (status) {
@@ -472,18 +517,33 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
           <button
             type="button"
             className="btn-primary"
-            onClick={save}
+            onClick={() => void save()}
             disabled={!canSave}
             title={
-              canSave
-                ? "Save to library"
-                : "Save while still recording — connection closes on stop"
+              fullText.length === 0
+                ? "Nothing to save yet — speak first"
+                : hasNewSinceSave
+                  ? "Update saved transcript with new finalised text"
+                  : savedId
+                    ? "Already up to date"
+                    : "Save to library"
             }
           >
-            ⤓ Save to library
+            {saving
+              ? "Saving…"
+              : !savedId
+                ? "⤓ Save to library"
+                : hasNewSinceSave
+                  ? "↻ Update saved"
+                  : "✓ Saved"}
           </button>
-          {savedId && (
+          {savedId && !hasNewSinceSave && (
             <span className="lv-saved-ok">✓ Saved · opens in library</span>
+          )}
+          {savedId && hasNewSinceSave && (
+            <span className="lv-saved-ok">
+              + {fullWordCount - savedWordCountRef.current} new words since save
+            </span>
           )}
         </footer>
       )}

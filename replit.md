@@ -47,7 +47,8 @@ a saved library, AI assistant, and links between transcripts.
 ### Backend Routes (api-server, all under `/api`)
 - `POST /transcribe` — multipart upload, runs AssemblyAI, persists, returns `{ id, ... }`.
 - `GET  /transcripts`, `GET /transcripts/:id`
-- `PATCH /transcripts/:id` (title / summary / bullets), `DELETE /transcripts/:id`
+- `POST /transcripts` body `{ title?, text, source?, language_code?, audio_duration? }` — create from raw text (used by live save and any future paste/import flow); auto-counts words.
+- `PATCH /transcripts/:id` (title / `text` / summary / bullets) — when `text` is updated, `word_count` is recomputed server-side. `DELETE /transcripts/:id`
 - `POST /transcripts/:id/summarize` body `{ mode: "summary"|"bullets", save? }`
 - `POST /transcripts/:id/relations` body `{ to_id, kind, note? }` (rejects self-link
   and duplicate pairs in either direction with the same kind, returning 409).

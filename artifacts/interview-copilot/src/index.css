@@ -324,6 +324,28 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .dv-transcript::-webkit-scrollbar { width: 6px; }
 .dv-transcript::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
 
+.dv-transcript-edit {
+  width: 100%;
+  min-height: 240px;
+  max-height: 60vh;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.dv-transcript-edit:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.dv-section-actions { display: flex; gap: 8px; align-items: center; }
+
 /* ════════════════════════════════════════
    AI ACTIONS / BLOCKS
    ════════════════════════════════════════ */

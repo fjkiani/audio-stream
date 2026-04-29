@@ -22,6 +22,9 @@ export default function DetailView({ id, candidates, onChanged, onDeleted }: Pro
   const [err, setErr] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState("");
+  const [editingText, setEditingText] = useState(false);
+  const [textInput, setTextInput] = useState("");
+  const [savingText, setSavingText] = useState(false);
   const [summarizing, setSummarizing] = useState<"summary" | "bullets" | null>(null);
   const [copied, setCopied] = useState<"text" | "summary" | null>(null);
 
@@ -48,6 +51,9 @@ export default function DetailView({ id, candidates, onChanged, onDeleted }: Pro
     setLoading(true);
     setErr(null);
     setEditingTitle(false);
+    setEditingText(false);
+    setTextInput("");
+    setSavingText(false);
     setSummarizing(null);
     setCopied(null);
     (async () => {
@@ -78,7 +84,10 @@ export default function DetailView({ id, candidates, onChanged, onDeleted }: Pro
     }
     try {
       await api.patch(detail.id, { title: t });
-      setDetail({ ...detail, title: t });
+      // Functional update so we don't clobber any newer fields (summary,
+      // bullets, relations) that may have been set by other async operations
+      // while this PATCH was in flight.
+      setDetail((prev) => (prev ? { ...prev, title: t } : prev));
       setEditingTitle(false);
       onChanged();
     } catch (e) {
@@ -92,16 +101,57 @@ export default function DetailView({ id, candidates, onChanged, onDeleted }: Pro
     setErr(null);
     try {
       const out = await api.summarize(detail.id, mode);
+      // Functional updates so concurrent edits (text/title PATCHes, relation
+      // changes that triggered a reload) aren't reverted by this write.
       if (mode === "summary" && out.summary !== undefined) {
-        setDetail({ ...detail, summary: out.summary });
+        const summary = out.summary;
+        setDetail((prev) => (prev ? { ...prev, summary } : prev));
       } else if (mode === "bullets" && out.bullets !== undefined) {
-        setDetail({ ...detail, bullets: out.bullets });
+        const bullets = out.bullets;
+        setDetail((prev) => (prev ? { ...prev, bullets } : prev));
       }
       onChanged();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "AI generation failed");
     } finally {
       setSummarizing(null);
+    }
+  };
+
+  const startEditingText = () => {
+    if (!detail) return;
+    setTextInput(detail.text);
+    setEditingText(true);
+  };
+
+  const cancelEditingText = () => {
+    setEditingText(false);
+    setTextInput("");
+  };
+
+  const saveText = async () => {
+    if (!detail) return;
+    const next = textInput;
+    if (next === detail.text) {
+      setEditingText(false);
+      return;
+    }
+    setSavingText(true);
+    setErr(null);
+    try {
+      await api.patch(detail.id, { text: next });
+      const wc = next.split(/\s+/).filter(Boolean).length;
+      // Functional update — protects any concurrent summary/bullets/relation
+      // updates that may have landed while the PATCH was in flight.
+      setDetail((prev) =>
+        prev ? { ...prev, text: next, word_count: wc } : prev,
+      );
+      setEditingText(false);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to save transcript text");
+    } finally {
+      setSavingText(false);
     }
   };
 
@@ -263,17 +313,60 @@ export default function DetailView({ id, candidates, onChanged, onDeleted }: Pro
         <section className="dv-section">
           <div className="dv-section-head">
             <h3>Transcript</h3>
-            <button
-              type="button"
-              className="btn-ghost btn-sm"
-              onClick={() => copy("text", detail.text)}
-            >
-              {copied === "text" ? "✓ Copied" : "Copy"}
-            </button>
+            <div className="dv-section-actions">
+              {editingText ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={() => void saveText()}
+                    disabled={savingText}
+                  >
+                    {savingText ? "Saving…" : "Save changes"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={cancelEditingText}
+                    disabled={savingText}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={startEditingText}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={() => copy("text", detail.text)}
+                  >
+                    {copied === "text" ? "✓ Copied" : "Copy"}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="dv-transcript">
-            {detail.text || <span className="dv-muted">(no speech detected)</span>}
-          </div>
+          {editingText ? (
+            <textarea
+              className="dv-transcript-edit"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              spellCheck
+              disabled={savingText}
+              autoFocus
+            />
+          ) : (
+            <div className="dv-transcript">
+              {detail.text || <span className="dv-muted">(no speech detected)</span>}
+            </div>
+          )}
         </section>
       </div>
     </div>
