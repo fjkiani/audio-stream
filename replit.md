@@ -95,10 +95,27 @@ Wire-up:
   `wss://streaming.assemblyai.com/v3/ws` (auth via `ASSEMBLYAI_API_KEY` header),
   forwards binary audio frames, and forwards `Begin`/`Turn`/`Termination`
   JSON messages back to the client.
-- Save: client sends `{"type":"save","title":"…"}` over the same WS while
-  recording; server inserts a `transcripts` row from the assembled finalised
-  text and replies with the new id. The frontend then jumps to the library
-  detail view of the new transcript.
+- Save: client uses HTTP `POST /api/transcripts` (and re-saves via `PATCH
+  /api/transcripts/:id` to capture late `final` segments). This works during
+  recording AND after Stop. The frontend then jumps to the library detail
+  view of the new transcript.
+
+Resilience (added to fix “chokes after a few minutes”):
+- Each successful WS open resets a backoff counter. On any *unexpected* close
+  (network blip, vite HMR, server-side `client-closed`, AssemblyAI idle
+  timeout, etc.), `LivePanel` schedules an exponential backoff reconnect
+  (500 ms → 15 s, max 10 attempts) and re-opens the WS without recreating
+  the mic stream / AudioContext / worklet — so accumulated `finals` survive
+  the gap. Server creates a fresh AssemblyAI session on each reconnect.
+- An `intentionalCloseRef` flag is set in `stop()` / `reset()` / unmount
+  paths so user-initiated closes never trigger a reconnect.
+- A `connectingRef` single-flight guard prevents duplicate sockets when
+  visibilitychange / online / backoff timer events race.
+- `visibilitychange` and `online` listeners resume the AudioContext (which
+  browsers auto-suspend in background tabs) and force an immediate reconnect
+  when the WS is closed.
+- A new `reconnecting` status (amber pill, `.lv-status--reconnecting`) is
+  shown to the user during recovery.
 
 Key files:
 - `artifacts/api-server/src/lib/assemblyLive.ts`
@@ -107,7 +124,6 @@ Key files:
 - styles under `.lv-*` in `src/index.css`
 
 Limitations:
-- Save only works while still recording (the WS is closed after stop).
 - `originalFilename` for live rows is hard-coded to `"(live recording)"`.
 - AssemblyAI's v3 streaming requires PAYG; if the key isn't enabled, the
   upstream returns close-code 4xx and the UI surfaces an error toast.

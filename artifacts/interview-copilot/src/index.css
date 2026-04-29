@@ -864,6 +864,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 }
 .lv-status--connecting,
 .lv-status--requesting-mic { color: var(--accent); border-color: rgba(0, 255, 136, 0.3); }
+.lv-status--reconnecting {
+  color: #ffc857;
+  border-color: rgba(255, 200, 87, 0.4);
+  background: rgba(255, 200, 87, 0.08);
+  animation: lv-pulse 1.4s ease-in-out infinite;
+}
 .lv-status--error { color: #ff7a8b; border-color: rgba(255, 122, 139, 0.4); }
 .lv-status--stopped { color: var(--text-dim); }
 .lv-elapsed { font-variant-numeric: tabular-nums; opacity: 0.8; }
