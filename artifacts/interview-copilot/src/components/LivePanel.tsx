@@ -11,6 +11,9 @@ type Status =
   | "stopped"
   | "error";
 
+/** Where to pull audio from. */
+type AudioSource = "mic" | "system" | "both";
+
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 interface FinalSegment {
@@ -49,11 +52,14 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
   const [savedId, setSavedId] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [audioSource, setAudioSource] = useState<AudioSource>("mic");
 
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const systemStreamRef = useRef<MediaStream | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const systemSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const sinkRef = useRef<GainNode | null>(null);
   const startedAtRef = useRef<number | null>(null);
@@ -124,6 +130,14 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       }
       sourceRef.current = null;
     }
+    if (systemSourceRef.current) {
+      try {
+        systemSourceRef.current.disconnect();
+      } catch {
+        /* ignore */
+      }
+      systemSourceRef.current = null;
+    }
     if (sinkRef.current) {
       try {
         sinkRef.current.disconnect();
@@ -139,6 +153,10 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+    }
+    if (systemStreamRef.current) {
+      systemStreamRef.current.getTracks().forEach((t) => t.stop());
+      systemStreamRef.current = null;
     }
     closeWs();
   }, [closeWs]);
@@ -314,18 +332,67 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
     chunkCountRef.current = 0;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      streamRef.current = stream;
+      // ── 1. Acquire audio stream(s) based on selected source ────────────
+      let micStream: MediaStream | null = null;
+      let sysStream: MediaStream | null = null;
 
-      // AudioContext at 16kHz when supported (Chromium honours this; Safari
-      // ignores and runs at hardware rate — the worklet handles downsampling).
+      if (audioSource === "mic" || audioSource === "both") {
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      }
+
+      if (audioSource === "system" || audioSource === "both") {
+        // getDisplayMedia shows a browser picker where the user selects a tab,
+        // window, or "entire screen" and must tick "Share audio / system audio".
+        // video:false is supported in Chrome; on Firefox or if it fails, the
+        // stream may have no audio tracks and we surface a friendly error.
+        let rawSys: MediaStream;
+        try {
+          rawSys = await navigator.mediaDevices.getDisplayMedia({
+            audio: true,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            video: false as any,
+          });
+        } catch {
+          // Some browsers won't allow video:false — retry with a tiny video
+          // track and then immediately mute/discard the video.
+          rawSys = await navigator.mediaDevices.getDisplayMedia({
+            audio: true,
+            video: { width: 1, height: 1, frameRate: 1 },
+          });
+          rawSys.getVideoTracks().forEach((t) => {
+            t.enabled = false;
+            t.stop();
+          });
+        }
+        if (!rawSys.getAudioTracks().length) {
+          rawSys.getTracks().forEach((t) => t.stop());
+          if (micStream) {
+            micStream.getTracks().forEach((t) => t.stop());
+          }
+          throw new Error(
+            'No audio found in the selected source. In the share picker, look for a "Share audio" or "Share system audio" checkbox and enable it.',
+          );
+        }
+        sysStream = rawSys;
+      }
+
+      // At least one stream must exist.
+      const primaryStream = micStream ?? sysStream!;
+      streamRef.current = primaryStream;
+      if (sysStream && sysStream !== primaryStream) {
+        systemStreamRef.current = sysStream;
+      } else if (sysStream) {
+        systemStreamRef.current = sysStream;
+      }
+
+      // ── 2. AudioContext + worklet ───────────────────────────────────────
       let ctx: AudioContext;
       try {
         ctx = new AudioContext({ sampleRate: 16000 });
@@ -335,11 +402,22 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       ctxRef.current = ctx;
       await ctx.audioWorklet.addModule(PCM_WORKLET_URL);
 
-      const source = ctx.createMediaStreamSource(stream);
-      sourceRef.current = source;
       const node = new AudioWorkletNode(ctx, "pcm-processor");
       nodeRef.current = node;
-      source.connect(node);
+
+      // Connect each stream into the worklet. The Web Audio graph mixes them
+      // together before the worklet sees them — no explicit merging needed.
+      if (micStream) {
+        const src = ctx.createMediaStreamSource(micStream);
+        sourceRef.current = src;
+        src.connect(node);
+      }
+      if (sysStream) {
+        const sysSrc = ctx.createMediaStreamSource(sysStream);
+        systemSourceRef.current = sysSrc;
+        sysSrc.connect(node);
+      }
+
       // CRITICAL: a Web Audio node only runs if it has a path to the
       // AudioContext destination. Route the worklet through a muted gain
       // into the speakers — keeps the worklet alive without any audible
@@ -355,13 +433,16 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
         ctx.sampleRate,
         "state:",
         ctx.state,
+        "source:",
+        audioSource,
       );
 
-      // Cheap volume meter + elapsed-time tick.
+      // ── 3. Cheap volume meter + elapsed-time tick ───────────────────────
       try {
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 512;
-        source.connect(analyser);
+        // Tap the first available source for the level meter.
+        (sourceRef.current ?? systemSourceRef.current)?.connect(analyser);
         const buf = new Uint8Array(analyser.fftSize);
         const sample = () => {
           analyser.getByteTimeDomainData(buf);
@@ -385,13 +466,15 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       openWs(false);
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : "Could not start microphone.";
+        err instanceof Error
+          ? err.message
+          : "Could not access audio. Check browser permissions.";
       setErrorMsg(msg);
       setStatus("error");
       intentionalCloseRef.current = true;
       cleanup();
     }
-  }, [cleanup, openWs]);
+  }, [cleanup, openWs, audioSource]);
 
   const stop = useCallback(() => {
     setStatus("stopping");
@@ -419,6 +502,9 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
+    }
+    if (systemStreamRef.current) {
+      systemStreamRef.current.getTracks().forEach((t) => t.stop());
     }
     if (stopFallbackRef.current !== null) {
       window.clearTimeout(stopFallbackRef.current);
@@ -564,11 +650,19 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       case "idle":
         return "Ready";
       case "requesting-mic":
-        return "Requesting microphone…";
+        return audioSource === "mic"
+          ? "Requesting microphone…"
+          : audioSource === "system"
+            ? "Requesting screen share…"
+            : "Requesting audio sources…";
       case "connecting":
         return "Connecting to AssemblyAI…";
       case "live":
-        return "● Live";
+        return audioSource === "mic"
+          ? "● Live · mic"
+          : audioSource === "system"
+            ? "● Live · system audio"
+            : "● Live · mic + system";
       case "reconnecting":
         return "Reconnecting…";
       case "stopping":
@@ -592,8 +686,7 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
         <div>
           <h2>Live transcription</h2>
           <p className="lv-subtitle">
-            Capture meetings or any audio from your microphone in real time
-            with AssemblyAI.
+            Capture your microphone, system/tab audio, or both — in real time.
           </p>
         </div>
         <div className={`lv-status lv-status--${status}`}>
@@ -604,6 +697,39 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
         </div>
       </header>
 
+      {/* Source picker — only visible when not actively recording */}
+      {!isRunning && status !== "stopping" && (
+        <div className="lv-source-row">
+          <span className="lv-source-label">Audio source</span>
+          <div className="lv-source-seg" role="group" aria-label="Audio source">
+            {(
+              [
+                { value: "mic", icon: "🎙", label: "Microphone" },
+                { value: "system", icon: "🔊", label: "System / Tab" },
+                { value: "both", icon: "⊕", label: "Mic + System" },
+              ] as { value: AudioSource; icon: string; label: string }[]
+            ).map(({ value, icon, label }) => (
+              <button
+                key={value}
+                type="button"
+                className={`lv-source-btn${audioSource === value ? " lv-source-btn--active" : ""}`}
+                onClick={() => setAudioSource(value)}
+              >
+                <span className="lv-source-icon">{icon}</span>
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+          {audioSource !== "mic" && (
+            <p className="lv-source-hint">
+              {audioSource === "system"
+                ? 'A browser share picker will appear. Select the tab or window, then check "Share audio" or "Share system audio" in the picker.'
+                : 'Two prompts will appear: mic permission first, then a share picker. Check "Share audio" in the second one.'}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="lv-controls">
         {!isRunning && status !== "stopping" && (
           <button
@@ -611,7 +737,12 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
             className="btn-primary lv-rec"
             onClick={() => void start()}
           >
-            <span className="lv-rec-dot" /> Start recording
+            <span className="lv-rec-dot" />
+            {audioSource === "mic"
+              ? "Start recording"
+              : audioSource === "system"
+                ? "Share & transcribe"
+                : "Start recording + share"}
           </button>
         )}
         {isRunning && (
@@ -625,7 +756,7 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
           </button>
         )}
 
-        <div className="lv-meter" aria-label="Microphone level">
+        <div className="lv-meter" aria-label="Audio level">
           <div
             className="lv-meter-fill"
             style={{ width: `${Math.round(audioLevel * 100)}%` }}
@@ -648,9 +779,11 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
         {finals.length === 0 && !partial && (
           <div className="lv-empty">
             {status === "live"
-              ? "Listening… start speaking and finalised text will appear here."
+              ? audioSource === "system"
+                ? "Listening to system audio… play something and the transcript will appear here."
+                : "Listening… start speaking and finalised text will appear here."
               : status === "idle"
-                ? "Click Start recording to begin a live session."
+                ? "Choose a source above, then click Start to begin."
                 : "—"}
           </div>
         )}
