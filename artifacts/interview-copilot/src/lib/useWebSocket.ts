@@ -1,6 +1,12 @@
 import { useRef, useCallback } from "react";
 
-const MAX_RECONNECT = 3;
+// Increase from 3 → 5 to give more recovery attempts on flaky networks.
+const MAX_RECONNECT = 5;
+
+// Token TTL is 600 s (API max). Refresh proactively at 80 % (480 s) so we
+// never hit the expiry wall mid-session.
+const TOKEN_TTL_SECONDS = 600;
+const REFRESH_AT_SECONDS = TOKEN_TTL_SECONDS * 0.8; // 480 s
 
 const DOMAIN_KEYTERMS = [
   "distributed systems", "microservices", "kubernetes", "docker",
@@ -23,16 +29,26 @@ export interface WsMessage {
 interface UseWebSocketOptions {
   onMessage: (msg: WsMessage) => void;
   onStatusChange: (status: string) => void;
+  /** Called whenever the WebSocket is replaced (reconnect). The caller must
+   *  hot-swap the audio pipeline's send target to the new socket. */
+  onSocketReplaced?: (newSend: (data: ArrayBuffer) => void) => void;
   enableKeyterms?: boolean;
   sessionPrompt?: string;
 }
 
 export function useWebSocket(opts: UseWebSocketOptions) {
-  const { onMessage, onStatusChange, enableKeyterms = true, sessionPrompt } = opts;
+  const {
+    onMessage,
+    onStatusChange,
+    onSocketReplaced,
+    enableKeyterms = true,
+    sessionPrompt,
+  } = opts;
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConnectedRef = useRef(false);
 
   const buildWsUrl = useCallback(
@@ -68,6 +84,17 @@ export function useWebSocket(opts: UseWebSocketOptions) {
     );
   };
 
+  // Forward declaration so attachHandlers and scheduleRefresh can reference each other.
+  const doReconnectRef = useRef<() => Promise<void>>();
+
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      if (!isConnectedRef.current) return;
+      doReconnectRef.current?.();
+    }, REFRESH_AT_SECONDS * 1000);
+  }, []);
+
   const attachHandlers = useCallback(
     (ws: WebSocket) => {
       ws.onmessage = (event) => {
@@ -96,30 +123,55 @@ export function useWebSocket(opts: UseWebSocketOptions) {
         if (attempt < MAX_RECONNECT) {
           const delayMs = Math.pow(2, attempt) * 1000;
           reconnectAttemptsRef.current = attempt + 1;
-          reconnectTimerRef.current = setTimeout(async () => {
-            try {
-              const tokenRes = await fetch("/api/token", { method: "POST" });
-              const tokenData = (await tokenRes.json()) as { token: string };
-              if (!tokenRes.ok || !tokenData.token) throw new Error("Re-auth failed");
-
-              const newWs = new WebSocket(buildWsUrl(tokenData.token));
-              wsRef.current = newWs;
-              newWs.onopen = () => {
-                sendConfigure(newWs);
-                onStatusChange("listening");
-                attachHandlers(newWs);
-              };
-            } catch {
-              onStatusChange("error");
-            }
+          reconnectTimerRef.current = setTimeout(() => {
+            doReconnectRef.current?.();
           }, delayMs);
         } else {
           onStatusChange("error");
         }
       };
     },
-    [onMessage, onStatusChange, buildWsUrl]
+    [onMessage, onStatusChange]
   );
+
+  // Shared reconnect logic used by both onclose and proactive refresh.
+  const doReconnect = useCallback(async () => {
+    try {
+      const tokenRes = await fetch("/api/token", { method: "POST" });
+      const tokenData = (await tokenRes.json()) as {
+        token: string;
+        expires_in_seconds?: number;
+      };
+      if (!tokenRes.ok || !tokenData.token) throw new Error("Re-auth failed");
+
+      const newWs = new WebSocket(buildWsUrl(tokenData.token));
+      wsRef.current = newWs;
+
+      // Wire handlers BEFORE onopen so no messages are missed.
+      attachHandlers(newWs);
+
+      newWs.onopen = () => {
+        sendConfigure(newWs);
+        onStatusChange("listening");
+        reconnectAttemptsRef.current = 0;
+
+        // Hot-swap the audio pipeline's send target to the new socket.
+        if (onSocketReplaced) {
+          onSocketReplaced((data: ArrayBuffer) => {
+            if (newWs.readyState === WebSocket.OPEN) newWs.send(data);
+          });
+        }
+
+        // Schedule the next proactive refresh.
+        scheduleRefresh();
+      };
+    } catch {
+      onStatusChange("error");
+    }
+  }, [buildWsUrl, attachHandlers, onStatusChange, onSocketReplaced, scheduleRefresh]);
+
+  // Keep the ref in sync so the timers can call the latest closure.
+  doReconnectRef.current = doReconnect;
 
   const connect = useCallback(
     (token: string): Promise<WebSocket> => {
@@ -129,12 +181,16 @@ export function useWebSocket(opts: UseWebSocketOptions) {
           const ws = new WebSocket(url);
           wsRef.current = ws;
 
+          // Wire handlers BEFORE onopen so no messages are missed.
+          attachHandlers(ws);
+
           ws.onopen = () => {
             isConnectedRef.current = true;
             reconnectAttemptsRef.current = 0;
             sendConfigure(ws);
             onStatusChange("listening");
-            attachHandlers(ws);
+            // Schedule proactive token refresh at 80 % of TTL.
+            scheduleRefresh();
             resolve(ws);
           };
 
@@ -146,7 +202,7 @@ export function useWebSocket(opts: UseWebSocketOptions) {
         }
       });
     },
-    [buildWsUrl, onStatusChange, attachHandlers]
+    [buildWsUrl, onStatusChange, attachHandlers, scheduleRefresh]
   );
 
   const disconnect = useCallback(() => {
@@ -154,6 +210,10 @@ export function useWebSocket(opts: UseWebSocketOptions) {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
     }
     reconnectAttemptsRef.current = 0;
     try {

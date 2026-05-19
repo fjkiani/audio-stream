@@ -149,6 +149,23 @@ export function useTranscription(capabilities: Capabilities) {
     [getSpeakerRole, gate]
   );
 
+  const audio = useAudioCapture();
+
+  /**
+   * Called by useWebSocket whenever the underlying socket is replaced
+   * (proactive token refresh or reconnect after drop). We hot-swap the
+   * audio pipeline's send function so PCM keeps flowing to the new socket
+   * without restarting the AudioWorklet.
+   */
+  const handleSocketReplaced = useCallback(
+    (newSend: (data: ArrayBuffer) => void) => {
+      if (audio.pipelineRef.current) {
+        audio.pipelineRef.current.updateSendFn(newSend);
+      }
+    },
+    [audio]
+  );
+
   const ws = useWebSocket({
     onMessage: handleMessage,
     onStatusChange: (s) => {
@@ -162,10 +179,9 @@ export function useTranscription(capabilities: Capabilities) {
         setStatus("error");
       }
     },
+    onSocketReplaced: handleSocketReplaced,
     enableKeyterms: capabilities.keyterms,
   });
-
-  const audio = useAudioCapture();
 
   // Replay coalesced context once the LLM finishes — if the interviewer kept
   // talking while the previous response was streaming, we now have a chance
@@ -200,8 +216,10 @@ export function useTranscription(capabilities: Capabilities) {
   }, [capabilities.clipboardCapture]);
 
   const start = useCallback(async () => {
-    setError(null);
+    // FIX: set isActiveRef FIRST — before any async work — so that
+    // useDebounceGate's tryFire() doesn't silently drop the first turns.
     isActiveRef.current = true;
+    setError(null);
 
     try {
       setStatus("mic");
