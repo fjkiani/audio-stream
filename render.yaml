@@ -1,0 +1,66 @@
+databases:
+  - name: audio-stream-db
+    databaseName: audio_stream
+    user: audio_stream
+    plan: free
+    region: oregon
+
+services:
+  # ── Main web service: Express API + Vite-built React frontend ──────────────
+  - type: web
+    name: audio-stream
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: >-
+      npm install -g pnpm &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @workspace/interview-copilot run build &&
+      pnpm --filter @workspace/api-server run build
+    startCommand: node --enable-source-maps ./artifacts/api-server/dist/index.mjs
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: BASE_PATH
+        value: /
+      - key: DATABASE_URL
+        fromDatabase:
+          name: audio-stream-db
+          property: connectionString
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LOG_LEVEL
+        value: info
+
+  # ── Keep-alive cron: pings the web service every 14 min so it never sleeps ─
+  - type: cron
+    name: audio-stream-keepalive
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    # Fires every 14 minutes — well under Render's 15-min idle timeout.
+    schedule: "*/14 * * * *"
+    buildCommand: echo "keepalive build"
+    startCommand: >-
+      node -e "
+        const https = require('https');
+        const url = process.env.TARGET_URL;
+        if (!url) { console.log('TARGET_URL not set, skipping'); process.exit(0); }
+        https.get(url, (res) => {
+          console.log('Ping', url, '->', res.statusCode);
+        }).on('error', (e) => {
+          console.error('Ping failed:', e.message);
+        });
+      "
+    envVars:
+      - key: TARGET_URL
+        value: https://audio-stream.onrender.com/api/healthz
