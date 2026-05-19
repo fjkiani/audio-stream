@@ -9,16 +9,12 @@ services:
   # ── Main web service: Express API + Vite-built React frontend ──────────────
   - type: web
     name: audio-stream
-    runtime: node
+    runtime: docker
     region: oregon
     plan: free
     branch: main
-    buildCommand: >-
-      npm install -g pnpm &&
-      pnpm install --frozen-lockfile &&
-      pnpm --filter @workspace/interview-copilot run build &&
-      pnpm --filter @workspace/api-server run build
-    startCommand: node --enable-source-maps ./artifacts/api-server/dist/index.mjs
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/healthz
     envVars:
       - key: NODE_ENV
@@ -63,4 +59,4 @@ services:
       "
     envVars:
       - key: TARGET_URL
-        value: https://audio-stream.onrender.com/api/healthz
+        value: https://audio-stream-r4e6.onrender.com/api/healthz
