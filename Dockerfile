@@ -11,7 +11,7 @@ RUN npm install -g pnpm@9
 COPY . .
 
 # Remove the preinstall guard (it blocks non-pnpm user agents in CI)
-RUN node scripts/patch-preinstall.js
+RUN node scripts/patch-preinstall.mjs
 
 # Install all dependencies
 RUN pnpm install --no-frozen-lockfile
