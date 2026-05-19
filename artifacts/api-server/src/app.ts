@@ -37,11 +37,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api", router);
 
 // Serve the Vite-built frontend in production.
-// API server dist lives at: artifacts/api-server/dist/index.mjs
-// Frontend dist lives at:   artifacts/interview-copilot/dist/public/
+// Compiled API server lives at:  /app/artifacts/api-server/dist/index.mjs
+// __dirname at runtime:           /app/artifacts/api-server/dist
+// Frontend dist lives at:         /app/artifacts/interview-copilot/dist/public
+// Relative path (3 levels up → /app, then into artifacts/...):
 const frontendDist = path.resolve(
   __dirname,
-  "../../../interview-copilot/dist/public",
+  "../../../artifacts/interview-copilot/dist/public",
 );
 app.use(express.static(frontendDist));
 
