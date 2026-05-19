@@ -46,7 +46,8 @@ const frontendDist = path.resolve(
 app.use(express.static(frontendDist));
 
 // SPA fallback — any non-API route returns index.html so client-side routing works.
-app.get("*", (_req, res) => {
+// Express 5 requires named wildcards; bare '*' is no longer valid.
+app.get("/{*path}", (_req, res) => {
   res.sendFile(path.join(frontendDist, "index.html"));
 });
 
