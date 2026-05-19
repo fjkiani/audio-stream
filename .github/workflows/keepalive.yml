@@ -1,0 +1,16 @@
+name: Keep Alive
+
+on:
+  schedule:
+    # Run every 14 minutes to prevent Render free-tier sleep
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping service
+        run: |
+          echo "Pinging https://audio-stream-u27q.onrender.com/api/healthz"
+          curl -sf https://audio-stream-u27q.onrender.com/api/healthz && echo "OK" || echo "Service may be sleeping, ping sent"
