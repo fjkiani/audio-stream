@@ -1,5 +1,4 @@
 # Use Debian-based Node (glibc) — Alpine (musl) breaks tailwindcss/rollup/lightningcss
-# because pnpm-workspace.yaml overrides disable the musl native binaries.
 FROM node:20-slim
 
 WORKDIR /app
@@ -22,7 +21,10 @@ RUN PORT=3000 pnpm --filter @workspace/interview-copilot run build
 # Build backend
 RUN pnpm --filter @workspace/api-server run build
 
+# Make start script executable
+RUN chmod +x start.sh
+
 ENV NODE_ENV=production
 EXPOSE 10000
 
-CMD ["node", "--enable-source-maps", "./artifacts/api-server/dist/index.mjs"]
+CMD ["sh", "start.sh"]
