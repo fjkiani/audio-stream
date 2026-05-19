@@ -76,6 +76,9 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
   const chunkCountRef = useRef(0);
   const connectingRef = useRef(false);
   const stopFallbackRef = useRef<number | null>(null);
+  // Buffer for PCM chunks that arrive while the WS is still connecting.
+  // Flushed in ws.onopen before the live handler is wired.
+  const earlyChunksRef = useRef<ArrayBuffer[]>([]);
 
   /** Just close the WebSocket. Used during reconnect and full cleanup. */
   const closeWs = useCallback(() => {
@@ -122,6 +125,7 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       }
       nodeRef.current = null;
     }
+    earlyChunksRef.current = [];
     if (sourceRef.current) {
       try {
         sourceRef.current.disconnect();
@@ -190,6 +194,13 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
       }
       connectingRef.current = true;
 
+      // Buffer chunks immediately so nothing is lost during the WS handshake.
+      if (node.port.onmessage === null) {
+        node.port.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
+          earlyChunksRef.current.push(ev.data);
+        };
+      }
+
       setStatus(isReconnect ? "reconnecting" : "connecting");
       const ws = new WebSocket(buildWsUrl());
       ws.binaryType = "arraybuffer";
@@ -205,6 +216,12 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
         // open is cheap insurance.
         if (ctx.state === "suspended") {
           void ctx.resume();
+        }
+        // Flush any chunks that arrived during the WS handshake.
+        const early = earlyChunksRef.current.splice(0);
+        for (const chunk of early) {
+          ws.send(chunk);
+          chunkCountRef.current++;
         }
         // Wire / re-wire the worklet → WS pipe.
         node.port.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
@@ -500,6 +517,7 @@ export default function LivePanel({ onSaved }: LivePanelProps) {
         /* ignore */
       }
     }
+    earlyChunksRef.current = [];
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
     }
