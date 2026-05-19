@@ -23,18 +23,16 @@ const server = http.createServer(app);
 // WebSocket route at /api/live for live transcription.
 attachLiveTranscribe(server);
 
-// Run DB migrations then start listening.
-runMigrations()
-  .then(() => {
-    server.listen(port, (err?: Error) => {
-      if (err) {
-        logger.error({ err }, "Error listening on port");
-        process.exit(1);
-      }
-      logger.info({ port }, "Server listening (HTTP + WS)");
-    });
-  })
-  .catch((err) => {
-    logger.error({ err }, "Migration failed — aborting startup");
+// Attempt DB migrations at startup; non-fatal so the server still starts
+// even if the DB is temporarily unreachable.
+runMigrations().catch((err) => {
+  logger.warn({ err }, "Startup migration failed — server will start anyway");
+});
+
+server.listen(port, (err?: Error) => {
+  if (err) {
+    logger.error({ err }, "Error listening on port");
     process.exit(1);
-  });
+  }
+  logger.info({ port }, "Server listening (HTTP + WS)");
+});
